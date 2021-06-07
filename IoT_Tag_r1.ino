@@ -16,7 +16,7 @@ the LED matrix displays "A", "B", "O" and "L", respectively.
 #include <ESP8266WiFi.h>        // 8266 Wifi driver
 #include <PubSubClient.h>       // MQTT server library
 #include <ArduinoJson.h>        // JSON library
-#include"LedMatrix.h"           // LED control library
+#include "LedMatrix.h"          // LED control library
 
 #define NUMBER_OF_DEVICES 1
 #define CS_PIN D4
@@ -25,7 +25,6 @@ LedMatrix ledMatrix = LedMatrix(NUMBER_OF_DEVICES, CS_PIN);
 #define red_light_pin D0    // red light is connected to D0
 #define green_light_pin D8  // green light is connected to D8
 #define blue_light_pin D3   // blue light is connected to D3
-#define LED1 32
 #define TRIG D2             // swith is connected to D2
 #define ID 5
 
@@ -33,10 +32,9 @@ LedMatrix ledMatrix = LedMatrix(NUMBER_OF_DEVICES, CS_PIN);
 // MQTT and WiFi set-up
 WiFiClient espClient;
 PubSubClient client(espClient); // Open an MQTT client
-Neotimer mytimer(900000); // Set timer interrupt to 15min
 
 // Key debounce set-up
-ButtonDebounce trigger(TRIG, 700);
+ButtonDebounce trigger(TRIG, 100);
 
 //const char *ssid = "iHome_Xiaomi_D484";         // Your SSID             
 //const char *password = "ihomepass";             // Your Wifi password
@@ -54,10 +52,9 @@ String ipAddress;
 String macAddr;
 String recMsg="";
 
-int val;              // variable for reading the pin status
-int val2;             // variable for reading the delayed status
 int buttonState;      // variable to hold the button state
 int Mode = 0;         // what mode is the light in?
+boolean keypress = 1;
 
 const char* msgCurtain="Nicole";
 const char* value="Available";
@@ -80,14 +77,16 @@ void setup_wifi() {
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
-    digitalWrite(LED1,digitalRead(LED1)^1);
+    digitalWrite(green_light_pin,digitalRead(green_light_pin)^1);
     if (millis()-currentTime > 30000){
       ESP.restart();
     }
   }
   // Show "WiFi connected" once linked and light up LED1
   Serial.printf("\nWiFi connected\n");
-  digitalWrite(LED1,HIGH);
+  digitalWrite(green_light_pin,LOW);
+  delay(2000);
+  digitalWrite(green_light_pin,HIGH);
   
   // Show IP address and MAC address
   ipAddress=WiFi.localIP().toString();
@@ -120,30 +119,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
 
   //Check the curtain and value#
-  if ((strcmp(msgCurtain, "Nicole") == 0) ) {
-     if ((strcmp(value,"Available")==0)){
-        //Set "A" on MAX7219 Screen
-        ledMatrix.setText("A");
-      }
-     else if ((strcmp(value,"Busy")==0)){
-        //Set "B" on MAX7219 Screen
-        ledMatrix.setText("B");
-      }
-     else if ((strcmp(value,"Online")==0)){
-        //Set "O" on MAX7219 Screen
-        ledMatrix.setText("O");
-      }
-     else if ((strcmp(value,"Leave")==0)){
-        //Set "L" on MAX7219 Screen
-        ledMatrix.setText("L");
-      }
-       ledMatrix.clear(); //Draw the currently set text at the current offset 
-       ledMatrix.drawText(); //Set current text
-       ledMatrix.commit(); //Commit transfers the byte buffer to the displays
-       delay(200);
-  }  
-  
-  else if ((strcmp(msgCurtain, "Henry") == 0) ) {
+  if ((strcmp(msgCurtain, "Henry") == 0) ) {
      if ((strcmp(value,"Available")==0)){
         ledMatrix.setText("A");
       }
@@ -162,24 +138,6 @@ void callback(char* topic, byte* payload, unsigned int length) {
        delay(200);
   }
 
-  else if ((strcmp(msgCurtain, "Benny") == 0) ) {
-     if ((strcmp(value,"Available")==0)){
-        ledMatrix.setText("A");
-      }
-     else if ((strcmp(value,"Busy")==0)){
-        ledMatrix.setText("B");
-      }
-     else if ((strcmp(value,"Online")==0)){
-        ledMatrix.setText("O");
-      }
-     else if ((strcmp(value,"Leave")==0)){
-        ledMatrix.setText("L");
-      }
-       ledMatrix.clear();
-       ledMatrix.drawText();
-       ledMatrix.commit();
-       delay(200);
-  }
 
   //Clear the buffer
   jsonBuffer.clear();  
@@ -203,7 +161,8 @@ void reconnect() {
       delay(1000);
       client.publish(mqttTopic, msg);
       reconnect_count = 0;
-    } else {
+    } 
+    else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
       Serial.println(" try again in 5 seconds");
@@ -222,41 +181,74 @@ void reconnect() {
 
 // Button control
 void buttonChanged(int state){
-  
-   Jsondata["Name"] = msgCurtain;
-   val = digitalRead(TRIG);           // Read input value and store it in val
-   delay(10);                         // 10 milliseconds is a good amount of time
-   val2 = digitalRead(TRIG);          // Read the input again to check for bounces
-   if (val == val2) {                 // Make sure we got 2 consistant readings!
-     if (val != buttonState) {        // The button state has changed!
-        if (val == LOW) {             // Check if the button is pressed
-          if (Mode == 0) {          
-              Mode = 1;               
-            } else {
-                if (Mode == 1) {        
-                Mode = 2;           
-            } else {
-                if (Mode == 2) {      
-                Mode = 3;           
-            } else {
-                if (Mode == 3) { 
-                Mode = 0;          
-                  }
-            }
-           }
-          }
-         }
-        }
-        buttonState = val;             // Save the new state in our variable
-      }
+  if (digitalRead(TRIG)== 0 && keypress==1) {  // If key is pressed and last key is processed
+    Mode++;
+    if (Mode == 4) Mode=0;      // Reset Mode value
+    keypress=0;
+  }
+}
 
-      // Now do whatever the lightMode indicates
-      if (Mode == 0) {// Availbale
+
+void setup() {
+  pinMode(TRIG, INPUT_PULLUP);          // Configure TRIG as an pull-up input
+  pinMode(red_light_pin, OUTPUT);
+  pinMode(green_light_pin, OUTPUT);
+  pinMode(blue_light_pin, OUTPUT);
+  
+  digitalWrite(red_light_pin, HIGH);
+  digitalWrite(green_light_pin, HIGH);
+  digitalWrite(blue_light_pin, HIGH);
+
+  buttonState = digitalRead(TRIG);      // Read the initial state
+  
+  Serial.begin(115200);                 // State serial communication at 115200 baud
+  Serial.println("System Start!");
+
+  //Initiate the display first
+  ledMatrix.init();                             // Initialize the SPI interface
+  ledMatrix.setIntensity(4);                    // Light intensity: 0 - 15
+  ledMatrix.setTextAlignment(TEXT_ALIGN_LEFT);  // Text is aligned to left side of the display
+
+  //Initial state is available
+  digitalWrite(green_light_pin, LOW); // Green
+  digitalWrite(red_light_pin, HIGH);
+  digitalWrite(blue_light_pin, HIGH);
+  ledMatrix.setText("A");
+  ledMatrix.clear();
+  ledMatrix.drawText();
+  ledMatrix.commit();  
+  
+  client.setCallback(callback);
+  trigger.setCallback(buttonChanged);
+
+  setup_wifi();                         // Connect to network
+  digitalWrite(green_light_pin, LOW); // Green
+  client.setServer(mqtt_server, 1883);
+
+  //Initalize Json message
+  Jsondata["Name"] = "Henry";
+  Jsondata["Status"] = "Available";  
+}
+
+void loop() {
+  trigger.update();
+  if (!client.connected()){  // Reconnect if connection is lost
+    reconnect();
+  }
+  client.loop();
+  // Now do whatever the lightMode indicates
+
+  if (keypress ==0) {
+      if (Mode == 0) {// Available
         digitalWrite(green_light_pin, LOW); // Green
         digitalWrite(red_light_pin, HIGH);
         digitalWrite(blue_light_pin, HIGH);
-        Jsondata["Status"] = "Available";
+        ledMatrix.setText("A");
+        ledMatrix.clear();
+        ledMatrix.drawText();
+        ledMatrix.commit();
         
+        Jsondata["Status"] = "Available";
         // Packing the JSON message into msg
         serializeJson(Jsondata, Serial);
         serializeJson(Jsondata, msg); 
@@ -264,6 +256,7 @@ void buttonChanged(int state){
         //Publish msg to MQTT server
         client.publish(mqttTopic, msg);
         Serial.println();
+        keypress=1;
         delay(100);
       }
 
@@ -271,8 +264,12 @@ void buttonChanged(int state){
         digitalWrite(red_light_pin, LOW); // Red
         digitalWrite(green_light_pin, HIGH);
         digitalWrite(blue_light_pin, HIGH);
-        Jsondata["Status"] = "Busy";
+        ledMatrix.setText("B");
+        ledMatrix.clear();
+        ledMatrix.drawText();
+        ledMatrix.commit();
         
+        Jsondata["Status"] = "Busy";
         // Packing the JSON message into msg
         serializeJson(Jsondata, Serial);
         serializeJson(Jsondata, msg); 
@@ -280,6 +277,7 @@ void buttonChanged(int state){
         //Publish msg to MQTT server
         client.publish(mqttTopic, msg);
         Serial.println();
+        keypress=1;
         delay(100);
       }
 
@@ -288,8 +286,12 @@ void buttonChanged(int state){
         digitalWrite(green_light_pin, LOW); 
         digitalWrite(red_light_pin, LOW);
         digitalWrite(blue_light_pin, HIGH);
-        Jsondata["Status"] = "Online";
+        ledMatrix.setText("O");
+        ledMatrix.clear();
+        ledMatrix.drawText();
+        ledMatrix.commit();
         
+        Jsondata["Status"] = "Online";
         // Packing the JSON message into msg
         serializeJson(Jsondata, Serial);
         serializeJson(Jsondata, msg); 
@@ -297,6 +299,7 @@ void buttonChanged(int state){
         //Publish msg to MQTT server
         client.publish(mqttTopic, msg);
         Serial.println();
+        keypress=1;
         delay(100);
       }
       
@@ -304,6 +307,11 @@ void buttonChanged(int state){
         digitalWrite(blue_light_pin, LOW); // Blue
         digitalWrite(red_light_pin, HIGH);
         digitalWrite(green_light_pin, HIGH);
+        ledMatrix.setText("L");
+        ledMatrix.clear();
+        ledMatrix.drawText();
+        ledMatrix.commit();        
+        
         Jsondata["Status"] = "Leave";
         
         // Packing the JSON message into msg
@@ -313,51 +321,8 @@ void buttonChanged(int state){
         //Publish msg to MQTT server
         client.publish(mqttTopic, msg);
         Serial.println();
+        keypress=1;
         delay(100);
       }
-  
-}
-
-
-void setup() {
-  pinMode(TRIG, INPUT_PULLUP);          // Configure TRIG as an pull-up input
-  pinMode(LED1, OUTPUT);
-  pinMode(red_light_pin, OUTPUT);
-  pinMode(green_light_pin, OUTPUT);
-  pinMode(blue_light_pin, OUTPUT);
-  
-  digitalWrite(LED1, LOW);
-  digitalWrite(red_light_pin, HIGH);
-  digitalWrite(green_light_pin, HIGH);
-  digitalWrite(blue_light_pin, HIGH);
-
-  buttonState = digitalRead(TRIG);      // Read the initial state
-  
-  Serial.begin(115200);                 // State serial communication at 115200 baud
-  Serial.println("System Start!");  
-  
-  client.setCallback(callback);
-  trigger.setCallback(buttonChanged);
-
-  setup_wifi();                         // Connect to network
-  client.setServer(mqtt_server, 1883);
-
-  //Initalize Json message
-  Jsondata["Name"] = "";
-  Jsondata["Status"] = ""; 
-  //Jsondata["ACK"] = 1;
-
-  ledMatrix.init();                             // Initialize the SPI interface
-  ledMatrix.setIntensity(4);                    // Light intensity: 0 - 15
-  ledMatrix.setTextAlignment(TEXT_ALIGN_LEFT);  // Text is aligned to left side of the display
-
-}
-
-void loop() {
-   trigger.update();
-   if (!client.connected()){  // Reconnect if connection is lost
-    reconnect();
-   }
-   client.loop();
-
+  }
 }
