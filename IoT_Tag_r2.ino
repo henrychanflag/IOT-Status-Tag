@@ -122,15 +122,27 @@ void callback(char* topic, byte* payload, unsigned int length) {
   if ((strcmp(msgCurtain, "Henry") == 0) ) {
      if ((strcmp(value,"Available")==0)){
         ledMatrix.setText("A");
+        digitalWrite(green_light_pin, LOW); // Green
+        digitalWrite(red_light_pin, HIGH);
+        digitalWrite(blue_light_pin, HIGH);
       }
      else if ((strcmp(value,"Busy")==0)){
         ledMatrix.setText("B");
+        digitalWrite(green_light_pin, HIGH);
+        digitalWrite(red_light_pin, LOW); //Red
+        digitalWrite(blue_light_pin, HIGH);
       }
      else if ((strcmp(value,"Online")==0)){
         ledMatrix.setText("O");
+        digitalWrite(green_light_pin, LOW); //Amber
+        digitalWrite(red_light_pin, LOW); //Amber
+        digitalWrite(blue_light_pin, HIGH);
       }
      else if ((strcmp(value,"Leave")==0)){
         ledMatrix.setText("L");
+        digitalWrite(green_light_pin, HIGH);
+        digitalWrite(red_light_pin, HIGH); 
+        digitalWrite(blue_light_pin, LOW); //Blue
       }
        ledMatrix.clear();
        ledMatrix.drawText();
